@@ -106,9 +106,9 @@ async function boopcheck() {
 		// currently we'll allow a diff with 300 "meaningful" additions.
 		const overhead = mentalOverhead(diff);
 
-		console.log(title, 'cost', overhead);
-
-		if (title.toLowerCase().includes('wip')) {
+		if (title.toLocaleLowerCase().includes('[rfc]')) {
+			// seems alright to me
+		} else if (title.toLowerCase().includes('wip')) {
 			await unboop({ owner, repo, pull_number }, "\"WIP\" is in the title");
 		} else if (body.toLowerCase().includes('wip')) {
 			await unboop({ owner, repo, pull_number }, "\"WIP\" is in the description");
