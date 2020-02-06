@@ -1,0 +1,8 @@
+.bash_logout
+.bashrc
+.config
+.npm
+.profile
+node_modules
+.env
+.gitconfig
