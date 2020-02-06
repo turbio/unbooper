@@ -133,8 +133,8 @@ async function boopcheck() {
 			labels: issue.labels,
 		};
 
-		const refactor = !title.toLowerCase().includes('[refactor]');
-		const rfc = !title.toLowerCase().includes('[rfc]');
+		const refactor = title.toLowerCase().includes('[refactor]');
+		const rfc = title.toLowerCase().includes('[rfc]');
 
 		if (rfc) {
 			// seems alright to me
