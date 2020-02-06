@@ -28,6 +28,25 @@ async function unboop({ owner, repo, pull_number, preboop }, reason) {
 	}
 }
 
+async function warn({ owner, repo, issue_number, labels }, warning, message) {
+	if (labels.find(l => l.name === warning)) {
+		return;
+	}
+
+	await octokit.issues.addLabels({
+		owner,
+		repo,
+		issue_number,
+		labels: [warning],
+	});
+	await octokit.issues.createComment({
+		owner,
+		repo,
+		issue_number,
+		body: message,
+	})
+}
+
 function mentalOverhead(diff) {
 	const lines = diff.split('\n');
 
@@ -106,35 +125,50 @@ async function boopcheck() {
 		// currently we'll allow a diff with 300 "meaningful" additions.
 		const overhead = mentalOverhead(diff);
 
-		if (title.toLocaleLowerCase().includes('[rfc]')) {
+		const ctx = {
+			pull_number,
+			issue_number: pull_number,
+			owner,
+			repo,
+			labels: issue.labels,
+		};
+
+		const refactor = !title.toLowerCase().includes('[refactor]');
+		const rfc = !title.toLowerCase().includes('[rfc]');
+
+		if (rfc) {
 			// seems alright to me
 		} else if (title.toLowerCase().includes('wip')) {
-			await unboop({ owner, repo, pull_number }, "\"WIP\" is in the title");
+			await unboop(ctx, "\"WIP\" is in the title");
 		} else if (body.toLowerCase().includes('wip')) {
-			await unboop({ owner, repo, pull_number }, "\"WIP\" is in the description");
+			await unboop(ctx, "\"WIP\" is in the description");
 		} else if (!pull.mergeable && false) { // TODO(turbio): this doesn't seem reliable
-			await unboop({ owner, repo, pull_number }, "not mergeable");
+			await unboop(ctx, "not mergeable");
 		} else if (pull.merged) {
-			await unboop({ owner, repo, pull_number }, "already merged");
+			await unboop(ctx, "already merged");
 		} else if (statuses.length && !statuses.find(s => s.state === 'success')) {
 			await unboop({ owner, repo, pull_number, preboop: !(statuses[0].state === 'failure' || statuses[0].state === 'error') }, "tests don't pass");
 		} else if (reviews.length && reviews.find(r => r.state === 'CHANGES_REQUESTED')) {
 			await unboop(
-				{ owner, repo, pull_number },
+				ctx,
 				"changes requested. Make sure to address everyone's comments and dismiss any reviews before booping.",
 			);
 		} else if (reviews.length && reviews.find(r => r.state === 'APPROVED')) {
-			await unboop({ owner, repo, pull_number }, "approved");
+			await unboop(ctx, "approved");
 		}
 		// rules for PR LOC:
-		// - unboop after 300
-		// - put [refactor] in the title to allow big PRs, but it MUST be a pure refactor
-		else if (overhead > 300 && !title.toLowerCase().includes('[refactor]')) {
+		// - unboop after too much overhead
+		// - put [refactor] in the title to allow big PRs
+		// - warn when the PR starts getting large
+		else if (overhead > 3000 && !refactor) {
 			await unboop(
-				{ owner, repo, pull_number },
+				ctx,
 				`Your PR is too powerful! Try breaking it up into multiple changes.
-If this is a **pure** refactor you can put [refactor] in the title.`,
+If this is a **pure** refactor you can put \`[refactor]\` in the title.`,
 			);
+		} else if (overhead > 300 && !refactor) {
+			await warn(ctx, 'hefty', `This PR is getting big.
+To make it easier for others to review you might want to breaking it up into smaller changes.`);
 		}
 	}
 
