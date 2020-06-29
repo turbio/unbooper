@@ -107,10 +107,11 @@ async function boopcheck() {
 		});
 
 		const { data: statuses } = await octokit.repos.listStatusesForRef({
-			owner,
-			repo,
+			owner: pull.head.repo.owner.login,
+			repo: pull.head.repo.name,
 			ref: pull.head.ref,
 		});
+
 
 		const { data: diff } = await octokit.pulls.get({
 			owner,
@@ -172,22 +173,7 @@ To make it easier for others to review you might want to breaking it up into sma
 		}
 	}
 
-	console.log('boop check complete!');
+	console.log('boop check complete!' , new Date());
 }
 
-const express = require('express');
-
-const app = express();
-
-app.get(`/${process.env.RUN_BOOP_URL}`, async (req, res) => {
-	try {
-		await boopcheck();
-	} catch (e) {
-		console.log(e.toString())
-		res.send(e.toString())
-		return
-	}
-	res.send('boop check complete!');
-});
-
-app.listen(3000, () => console.log(`we up bois`));
+setInterval(boopcheck, 600000)

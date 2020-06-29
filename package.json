@@ -1,7 +1,6 @@
 {
   "main": "index.js",
   "dependencies": {
-    "@octokit/rest": "16.27.3",
-    "express": "4.17.1"
+    "@octokit/rest": "16.27.3"
   }
 }
