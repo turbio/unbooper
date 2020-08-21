@@ -1,6 +1,8 @@
 const Octokit = require('@octokit/rest')
 const octokit = new Octokit({ auth: process.env.TOKEN });
 
+const bopOverhead = 80;
+
 async function unboop({ owner, repo, pull_number, preboop }, reason) {
 	console.log(`unbooping https://github.com/${owner}/${repo}/pull/${pull_number} : ${reason}`)
 	const issue_number = pull_number;
@@ -159,6 +161,22 @@ async function boopcheck() {
 		const refactor = title.toLowerCase().includes('[refactor]');
 		const rfc = title.toLowerCase().includes('[rfc]');
 
+    if (ctx.labels.find(l => l.name === 'bop') && mentalOverhead(diff) > bopOverhead) {
+      await octokit.issues.removeLabel({
+        owner,
+        repo,
+        issue_number: pull_number,
+        name: 'bop',
+      });
+
+      await octokit.issues.createComment({
+        owner,
+        repo,
+        issue_number: pull_number,
+        body: `🚓 Looks like this PR has grown too powerful! Going to have to demote it... sorry frend`,
+      });
+    }
+
 		if (rfc) {
 			// seems alright to me
 		} else if (!pull.mergeable && false) { // TODO(turbio): this doesn't seem reliable
@@ -201,8 +219,8 @@ Thinks there's a mistake here? Talk to @turbio`);
     } 
     
     // at this point the PR better be okay, maybe we'll give it some kudos
-    else if (mentalOverhead(diff) < 100) {
-      await warn(ctx, 'bop', `Hey, this PRs short and easy to review! Promoting to \`bop\`.`);
+    else if (mentalOverhead(diff) <= bopOverhead) {
+      await warn(ctx, 'bop', `Good work, this PRs short and easy to review! Promoting to \`bop\`.`);
     }
 	}
 
