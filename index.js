@@ -33,6 +33,8 @@ async function warn({ owner, repo, issue_number, labels }, warning, message) {
 		return;
 	}
 
+	console.log(`warning https://github.com/${owner}/${repo}/pull/${issue_number} : ${message}`)
+
 	await octokit.issues.addLabels({
 		owner,
 		repo,
@@ -47,6 +49,8 @@ async function warn({ owner, repo, issue_number, labels }, warning, message) {
 	})
 }
 
+// try to encourage easy to review PRs. A negative mental overhead should lead to rejection.
+// currently we'll allow a diff with 300 "meaningful" additions.
 function mentalOverhead(diff) {
 	const lines = diff.split('\n');
 
@@ -79,6 +83,28 @@ function mentalOverhead(diff) {
 	}
 
 	return n;
+}
+
+function touchedFiles(diff) {
+  const prefix = 'diff --git a/';
+  return diff
+    .split('\n')
+    .filter(l => l.startsWith(prefix))
+    .map(l => l.slice(prefix.length).split(' b/')[0])
+}
+
+function touchedDeps(diff) {
+  const lockFiles = ['yarn.lock', 'go.sum'];
+  return !!touchedFiles(diff)
+    .map(f => f.split('/').slice(-1)[0])
+    .find(n => lockFiles.includes(n))
+}
+
+function touchedNonDeps(diff) {
+  const pkgFiles = ['yarn.lock', 'go.sum', 'package.json', 'go.mod'];
+  return !!touchedFiles(diff)
+    .map(f => f.split('/').slice(-1)[0])
+    .find(n => !pkgFiles.includes(n))
 }
 
 async function boopcheck() {
@@ -122,10 +148,6 @@ async function boopcheck() {
 			}
 		});
 
-		// try to encourage easy to review PRs. A negative mental overhead should lead to rejection.
-		// currently we'll allow a diff with 300 "meaningful" additions.
-		const overhead = mentalOverhead(diff);
-
 		const ctx = {
 			pull_number,
 			issue_number: pull_number,
@@ -139,10 +161,6 @@ async function boopcheck() {
 
 		if (rfc) {
 			// seems alright to me
-		} else if (title.toLowerCase().includes('wip')) {
-			await unboop(ctx, "\"WIP\" is in the title");
-		} else if (body.toLowerCase().includes('wip')) {
-			await unboop(ctx, "\"WIP\" is in the description");
 		} else if (!pull.mergeable && false) { // TODO(turbio): this doesn't seem reliable
 			await unboop(ctx, "not mergeable");
 		} else if (pull.merged) {
@@ -156,24 +174,40 @@ async function boopcheck() {
 			);
 		} else if (reviews.length && reviews.find(r => r.state === 'APPROVED')) {
 			await unboop(ctx, "approved");
-		}
-		// rules for PR LOC:
-		// - unboop after too much overhead
-		// - put [refactor] in the title to allow big PRs
-		// - warn when the PR starts getting large
-		else if (overhead > 3000 && !refactor) {
+		} else if (mentalOverhead(diff) > 3000 && !refactor) {
+      // rules for PR LOC:
+      // - unboop after too much overhead
+      // - put [refactor] in the title to allow big PRs
+      // - warn when the PR starts getting large
+
 			await unboop(
 				ctx,
 				`Your PR is too powerful! Try breaking it up into multiple changes.
 If this is a **pure** refactor you can put \`[refactor]\` in the title.`,
 			);
-		} else if (overhead > 300 && !refactor) {
+		} else if (mentalOverhead(diff) > 300 && !refactor) {
 			await warn(ctx, 'hefty', `This PR is getting big.
 To make it easier for others to review you might want to breaking it up into smaller changes.`);
-		}
+		} else if (touchedNonDeps(diff) && ctx.labels.find(l => l.name === 'deps')) {
+			await unboop(ctx, `**UMMM WHAT!?** This PR has the \`deps\` deps label but it's touching more than just dependencies. Please fix!`);
+    } else if (touchedDeps(diff) &&  touchedNonDeps(diff)) {
+			await unboop(ctx, `Woah there buddy! This PR touches the dependencies!
+
+If you're really sure you want to do this please open a separate PR that **ONLY** touches the necessary depencency files.
+
+Thinks there's a mistake here? Talk to @turbio`);
+    } else if (touchedDeps(diff)) {
+      warn(ctx, 'deps', `Looks like this is a PR to add dependencies. Be sure to explain why and any impact this will have on size. If you're feeling extra nice, skim the code you're pulling in!`)
+    } 
+    
+    // at this point the PR better be okay, maybe we'll give it some kudos
+    else if (mentalOverhead(diff) < 100) {
+      await warn(ctx, 'bop', `Hey, this PRs short and easy to review! Promoting it to \`bop\`.`);
+    }
 	}
 
 	console.log('boop check complete!' , new Date());
 }
 
-setInterval(boopcheck, 600000)
+boopcheck()
+setInterval(boopcheck, 60000);
