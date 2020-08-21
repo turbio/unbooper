@@ -202,7 +202,7 @@ Thinks there's a mistake here? Talk to @turbio`);
     
     // at this point the PR better be okay, maybe we'll give it some kudos
     else if (mentalOverhead(diff) < 100) {
-      await warn(ctx, 'bop', `Hey, this PRs short and easy to review! Promoting it to \`bop\`.`);
+      await warn(ctx, 'bop', `Hey, this PRs short and easy to review! Promoting to \`bop\`.`);
     }
 	}
 
