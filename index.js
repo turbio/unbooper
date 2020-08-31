@@ -1,4 +1,4 @@
-const Octokit = require('@octokit/rest')
+const {Octokit} = require('@octokit/rest')
 const octokit = new Octokit({ auth: process.env.TOKEN });
 
 const bopOverhead = 80;
@@ -20,6 +20,15 @@ async function unboop({ owner, repo, pull_number, preboop }, reason) {
 			issue_number,
 			labels: ['preboop'],
 		})
+
+		if (reason) {
+			await octokit.issues.createComment({
+				owner,
+				repo,
+				issue_number,
+				body: `prebooping: ${reason}`
+			})
+		}
 	} else {
 		await octokit.issues.createComment({
 			owner,
@@ -134,7 +143,7 @@ async function boopcheck() {
 			pull_number,
 		});
 
-		const { data: statuses } = await octokit.repos.listStatusesForRef({
+		const { data: statuses } = await octokit.repos.listCommitStatusesForRef({
 			owner: pull.head.repo.owner.login,
 			repo: pull.head.repo.name,
 			ref: pull.head.ref,
@@ -177,14 +186,23 @@ async function boopcheck() {
       });
     }
 
+
 		if (rfc) {
 			// seems alright to me
 		} else if (!pull.mergeable && false) { // TODO(turbio): this doesn't seem reliable
 			await unboop(ctx, "not mergeable");
 		} else if (pull.merged) {
 			await unboop(ctx, "already merged");
-		} else if (statuses.length && !statuses.find(s => s.state === 'success')) {
-			await unboop({ owner, repo, pull_number, preboop: !(statuses[0].state === 'failure' || statuses[0].state === 'error') }, "tests don't pass");
+		} else if (statuses.length && statuses.find(s => s.state !== 'success')) {
+			if (statuses.find(s => s.state === 'failure' || s.state === 'error')) {
+				await unboop(ctx, "tests don't pass");
+			} else if (statuses.find(s => s.state === 'pending')) {
+				await unboop({ ...ctx,  preboop: true }, "tests are pending");
+			} else {
+				await unboop(ctx, "go fix unbooper, shouldn't hit this code path, sorry!");
+			}
+
+
 		} else if (reviews.length && reviews.find(r => r.state === 'CHANGES_REQUESTED')) {
 			await unboop(
 				ctx,
