@@ -11,7 +11,7 @@ This periodically checks all the booped pull requests for violations.
 - there are no pending changes requested
 - the pull request has not be approved
 - the mental overhead is within reason (that is: the number of meaningful additions)
-- if the diff touches dependencies it can only touch dependencies
+- if the diff touches dependencies it will be warned
 - good boops turn into bops
 
 the tag `preboop` will also add the tag `boop` if all the rules are satisfied.

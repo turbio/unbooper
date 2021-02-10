@@ -1,7 +1,7 @@
 const {Octokit} = require('@octokit/rest')
 const octokit = new Octokit({ auth: process.env.TOKEN });
 
-const bopOverhead = 80;
+const bopOverhead = 50;
 
 async function unboop({ owner, repo, pull_number, preboop }, reason) {
 	console.log(`unbooping https://github.com/${owner}/${repo}/pull/${pull_number} : ${reason}`)
@@ -127,7 +127,7 @@ async function boopcheck() {
 	});
 
 	for (const issue of data) {
-		const { number: pull_number, repository, title, body } = issue;
+		const { number: pull_number, repository, title, body, labels } = issue;
 		const repo = repository.name;
 		const owner = repository.owner.login;
 
@@ -193,16 +193,14 @@ async function boopcheck() {
 			await unboop(ctx, "not mergeable");
 		} else if (pull.merged) {
 			await unboop(ctx, "already merged");
-		} else if (statuses.length && statuses.find(s => s.state !== 'success')) {
-			if (statuses.find(s => s.state === 'failure' || s.state === 'error')) {
+		} else if (statuses.length && statuses[0].state !== 'success') {
+			if (statuses[0].state === 'failure' || statuses[0].state === 'error') {
 				await unboop(ctx, "tests don't pass");
-			} else if (statuses.find(s => s.state === 'pending')) {
+			} else if (statuses[0].state === 'pending') {
 				await unboop({ ...ctx,  preboop: true }, "tests are pending");
 			} else {
 				await unboop(ctx, "go fix unbooper, shouldn't hit this code path, sorry!");
 			}
-
-
 		} else if (reviews.length && reviews.find(r => r.state === 'CHANGES_REQUESTED')) {
 			await unboop(
 				ctx,
@@ -224,16 +222,23 @@ If this is a **pure** refactor you can put \`[refactor]\` in the title.`,
 		} else if (mentalOverhead(diff) > 300 && !refactor) {
 			await warn(ctx, 'hefty', `This PR is getting big.
 To make it easier for others to review you might want to breaking it up into smaller changes.`);
-		} else if (touchedNonDeps(diff) && ctx.labels.find(l => l.name === 'deps')) {
-			await unboop(ctx, `**UMMM WHAT!?** This PR has the \`deps\` deps label but it's touching more than just dependencies. Please fix!`);
-    } else if (touchedDeps(diff) &&  touchedNonDeps(diff)) {
-			await unboop(ctx, `Woah there buddy! This PR touches the dependencies!
+		} else if (touchedDeps(diff)) {
+      warn(ctx, 'deps', `warning: This PR touches the dependencies!
 
-If you're really sure you want to do this please open a separate PR that **ONLY** touches the necessary depencency files.
+When we're pulling in a dependency we're now maintaining it, it is no different from code we have in our repos.
 
-Thinks there's a mistake here? Talk to @turbio`);
-    } else if (touchedDeps(diff)) {
-      warn(ctx, 'deps', `Looks like this is a PR to add dependencies. Be sure to explain why and any impact this will have on size. If you're feeling extra nice, skim the code you're pulling in!`)
+Please make sure:
+- [ ] You pull in new dependencies in a separate PR.
+- [ ] You read and understand the code you're pulling in.
+- [ ] Doesn't have security holes.
+- [ ] It's doesn't add a lot to the bundle size.
+- [ ] It isn't a solution that is over engineered.
+- [ ] You consider vendoring it.
+
+If you are upgrading a dependency please make sure to update related dependencies
+
+If you're reviewing this PR, please review the dependencies and go checkout the source.
+`)
     } 
     
     // at this point the PR better be okay, maybe we'll give it some kudos
