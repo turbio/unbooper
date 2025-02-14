@@ -1,6 +1,6 @@
 {
   "main": "index.js",
   "dependencies": {
-    "@octokit/rest": "^18.0.3"
+    "@octokit/rest": "^21.1.0"
   }
 }
